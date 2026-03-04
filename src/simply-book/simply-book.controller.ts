@@ -120,4 +120,54 @@ export class SimplyBookController {
       };
     }
   }
+
+  @Post('migration/by-ids')
+  @HttpCode(200)
+  async migrateByIds(@Body() body: { ids: (string | number)[] }) {
+    if (!body.ids || !Array.isArray(body.ids)) {
+      return {
+        status: 'error',
+        message: 'ids array is required and must be an array',
+      };
+    }
+
+    try {
+      console.log(`Starting migration for ${body.ids.length} specific IDs.`);
+      const migratedIds: (string | number)[] = [];
+      const failedIds: { id: string | number; error: string }[] = [];
+
+      for (const id of body.ids) {
+        try {
+          const booking = await this.simplyBookService.getBookingDetails(id);
+          await this.googleSheetsService.upsertBooking(booking);
+          migratedIds.push(id);
+        } catch (error) {
+          console.error(`Failed to migrate booking ${id}:`, error);
+          failedIds.push({
+            id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      return {
+        status: 'success',
+        message: 'Specific IDs migration finished',
+        totalProcessed: body.ids.length,
+        migratedCount: migratedIds.length,
+        failedCount: failedIds.length,
+        migratedIds,
+        failedIds,
+      };
+    } catch (error) {
+      console.error('Migration by IDs failed:', error);
+      return {
+        status: 'error',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error during migration',
+      };
+    }
+  }
 }
