@@ -17,11 +17,12 @@ export const GOOGLE_SHEET_COLUMNS = [
   'Публікація чи дозволена', // P
   'Спосіб оплати', // Q
   'Посилання', // R
-  'ПІ клієнта', // S
-  'Номер телефону', // T
-  'Ел пошта', // U
-  'Місто', // V
-  'Статус та помилки', // W
+  'Відправка посилання', // S
+  'ПІ клієнта', // T
+  'Номер телефону', // U
+  'Ел пошта', // V
+  'Місто', // W
+  'Статус та помилки', // X
 ];
 
 export enum ColumnIndex {
@@ -43,9 +44,10 @@ export enum ColumnIndex {
   PUBLICATION_ALLOWED = 15,
   PAYMENT_METHOD = 16,
   GALLERY_LINK = 17,
-  CLIENT_NAME = 18,
-  PHONE = 19,
-  EMAIL = 20,
-  CITY = 21,
-  STATUS = 22,
+  SEND_GALLERY = 18,
+  CLIENT_NAME = 19,
+  PHONE = 20,
+  EMAIL = 21,
+  CITY = 22,
+  STATUS = 23,
 }

@@ -22,4 +22,5 @@ export interface BookingData {
   email: string;
   city: string;
   status?: string;
+  sendGallery?: boolean | string;
 }

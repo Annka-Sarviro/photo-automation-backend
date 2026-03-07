@@ -105,10 +105,14 @@ export class GoogleSheetsService implements OnModuleInit {
       });
     } else {
       // Check if headers match, if not, we might need to update them
-      // This is a bit complex with google-spreadsheet, but we can at least try to ensure ID is there
       try {
         await sheet.loadHeaderRow();
-        if (sheet.headerValues[0] !== 'ID') {
+        // If number of columns doesn't match, or the first column is not ID, reset headers
+        if (
+          sheet.headerValues.length !== GOOGLE_SHEET_COLUMNS.length ||
+          sheet.headerValues[0] !== 'ID'
+        ) {
+          console.log(`🔄 Updating headers for sheet: ${monthYear}`);
           await sheet.setHeaderRow(GOOGLE_SHEET_COLUMNS);
         }
       } catch (e) {
@@ -161,6 +165,9 @@ export class GoogleSheetsService implements OnModuleInit {
             'Спосіб оплати',
           ) as string;
           manualFields.galleryLink = existingRow.get('Посилання') as string;
+          manualFields.sendGallery = existingRow.get(
+            'Відправка посилання',
+          ) as string;
 
           await existingRow.delete();
           console.log(
@@ -200,6 +207,8 @@ export class GoogleSheetsService implements OnModuleInit {
       booking.paymentMethod = manualFields.paymentMethod;
     if (manualFields.galleryLink)
       booking.galleryLink = manualFields.galleryLink;
+    if (manualFields.sendGallery)
+      booking.sendGallery = manualFields.sendGallery;
 
     const targetSheet = await this.ensureMonthlySheet(booking.date);
     const rowData = this.mapToRow(booking);
@@ -254,6 +263,7 @@ export class GoogleSheetsService implements OnModuleInit {
       'Публікація чи дозволена': booking.publicationAllowed,
       'Спосіб оплати': booking.paymentMethod,
       Посилання: booking.galleryLink,
+      'Відправка посилання': !!booking.sendGallery,
       'ПІ клієнта': booking.clientName,
       'Номер телефону': booking.phone,
       'Ел пошта': booking.email,

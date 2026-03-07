@@ -52,30 +52,21 @@ function onSheetEdit(e) {
     const bookingDate = rowData[COL['Дата фотосесії'] - 1];
 
 
-    // ── ЛОГІКА: Посилання на галерею ──────────────────────────────
-    if (col === COL['Посилання']) {
-        let galleryLink = value ? value.toString().trim() : '';
+    // ── ЛОГІКА: Відправка посилання на галерею за чекбоксом ────────
+    if (col === COL['Відправка посилання'] && (value === true || value === 'TRUE')) {
+        const oldValue = e.oldValue;
+        // Перевіряємо, чи змінилося з false/порожньо на true (щоб не слати при знятті)
+        const wasEmptyOrFalse = !oldValue || oldValue === 'false' || oldValue === false || oldValue === 'FALSE';
 
-        if (galleryLink !== '') {
-            // Якщо користувач забув http/https — додаємо автоматично для валідності
-            if (!galleryLink.toLowerCase().startsWith('http')) {
-                galleryLink = 'https://' + galleryLink;
-            }
+        if (wasEmptyOrFalse) {
+            const galleryLink = rowData[COL['Посилання'] - 1] ? rowData[COL['Посилання'] - 1].toString().trim() : '';
 
-            if (!isValidEmail(clientEmail)) {
-                console.warn(`Рядок ${row}: Email невалідний, пропускаємо.`);
-                return;
-            }
+            if (galleryLink !== '') {
+                if (!isValidEmail(clientEmail)) {
+                    console.warn(`Рядок ${row}: Email невалідний, пропускаємо.`);
+                    return;
+                }
 
-            const cache = CacheService.getScriptCache();
-            const lockKey = `gallery_lock_${row}`;
-            const editTs = Date.now().toString();
-
-            cache.put(lockKey, editTs, CONFIG.CACHE_TTL);
-            console.log(`[WAIT] Дебаунс 5с для рядка ${row}...`);
-            Utilities.sleep(CONFIG.DEBOUNCE_MS);
-
-            if (cache.get(lockKey) === editTs) {
                 sendWebhook({
                     id: bookingId,
                     date: bookingDate,
@@ -85,6 +76,10 @@ function onSheetEdit(e) {
                     eventType: 'gallery_link'
                 });
                 sheet.getRange(row, COL['Статус та помилки']).setValue("лист відправлено 1");
+            } else {
+                console.warn(`Рядок ${row}: Посилання на галерею порожнє, не відправляємо.`);
+                // Опціонально можна зняти чекбокс назад, якщо посилання немає
+                range.setValue(false);
             }
         }
     }
@@ -119,7 +114,7 @@ function onSheetEdit(e) {
             }
         }
     }
-    if (col === COL['Дата фотосесії'] || col === COL['Година фотосесії'] || col === COL['Відретушовані фото']) {
+    if (col === COL['Дата фотосесії'] || col === COL['Година фотосесії'] || col === COL['Відретушовані фото'] || col === COL['Відправка посилання']) {
         fixCheckbox(sheet, row);
     }
 }
@@ -178,9 +173,17 @@ function doPost(e) {
                 cell.setValue(isRetouched);
 
                 console.log(`ID ${idToFind} знайдено в рядку ${targetRow}. Чекбокс оновлено станом: ${isRetouched}`);
-            } else if (targetRow !== -1) {
-                console.log(`ID ${idToFind} знайдено в рядку ${targetRow}. Чекбокс не оновлювався (немає даних про ретуш).`);
-            } else {
+            }
+
+            // 4. Ініціалізація чекбокса "Відправка посилання"
+            if (targetRow !== -1 && COL['Відправка посилання']) {
+                const cell = sheet.getRange(targetRow, COL['Відправка посилання']);
+                const val = cell.getValue();
+                if (val !== true && val !== false) {
+                    cell.insertCheckboxes();
+                    cell.setValue(false);
+                }
+            } else if (targetRow === -1) {
                 console.warn(`Запис з ID ${idToFind} не знайдено після сортування.`);
             }
         }
@@ -274,20 +277,33 @@ function jsonResponse(data) {
 function fixCheckbox(sheet, row) {
     if (row <= 1) return;
     const COL = getColumnMap(sheet);
-    if (!COL['Відретушовані фото']) return;
+    if (!COL['Відретушовані фото'] && !COL['Відправка посилання']) return;
 
-    const cell = sheet.getRange(row, COL['Відретушовані фото']);
-    const val = cell.getValue();
+    // Fix Retouched checkbox
+    if (COL['Відретушовані фото']) {
+        const cell = sheet.getRange(row, COL['Відретушовані фото']);
+        const val = cell.getValue();
+        ensureCheckbox(cell, val);
+    }
 
-    // Перетворюємо будь-яке значення (текст "false", рядок "TRUE", null) у справжній Boolean
+    // Fix Send Gallery checkbox
+    if (COL['Відправка посилання']) {
+        const cell = sheet.getRange(row, COL['Відправка посилання']);
+        const val = cell.getValue();
+        ensureCheckbox(cell, val);
+    }
+}
+
+/**
+ * Допоміжна функція для вставки чекбокса та збереження булевого значення
+ */
+function ensureCheckbox(cell, val) {
     let boolVal = false;
     if (typeof val === 'string') {
         boolVal = (val.toLowerCase().trim() === 'true');
     } else {
         boolVal = Boolean(val);
     }
-
-    // Швидке "лікування" клітинки
     cell.clearDataValidations();
     cell.insertCheckboxes();
     cell.setValue(boolVal);
