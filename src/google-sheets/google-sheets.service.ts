@@ -122,14 +122,33 @@ export class GoogleSheetsService implements OnModuleInit {
     return sheet;
   }
 
-  async upsertBooking(booking: BookingData) {
+  async upsertBooking(booking: BookingData, oldDate?: string) {
     if (!booking.id || !booking.date) return;
 
     const manualFields: Partial<BookingData> = {};
 
-    // First, find and remove this booking ID from ANY existing sheet to prevent duplicates
-    // especially when moving between different months.
-    for (const sheet of this.doc.sheetsByIndex) {
+    // First, find and remove this booking ID from relevant sheets to prevent duplicates
+    // We only need to check the current date's sheet and the old date's sheet (if provided).
+    const sheetsToCheck = new Set<string>();
+
+    const currentDateStr = new Date(booking.date).toLocaleString('uk-UA', {
+      month: 'long',
+      year: 'numeric',
+    });
+    sheetsToCheck.add(currentDateStr);
+
+    if (oldDate) {
+      const oldDateStr = new Date(oldDate).toLocaleString('uk-UA', {
+        month: 'long',
+        year: 'numeric',
+      });
+      sheetsToCheck.add(oldDateStr);
+    }
+
+    for (const sheetTitle of sheetsToCheck) {
+      const sheet = this.doc.sheetsByTitle[sheetTitle];
+      if (!sheet) continue;
+
       try {
         const rows = await sheet.getRows();
         const existingRow = rows.find(
@@ -165,9 +184,9 @@ export class GoogleSheetsService implements OnModuleInit {
             'Спосіб оплати',
           ) as string;
           manualFields.galleryLink = existingRow.get('Посилання') as string;
-          manualFields.sendGallery = existingRow.get(
-            'Відправка посилання',
-          ) as string;
+          manualFields.sendGallery =
+            existingRow.get('Відправка посилання') === true ||
+            existingRow.get('Відправка посилання') === 'TRUE';
 
           await existingRow.delete();
           console.log(
@@ -207,7 +226,7 @@ export class GoogleSheetsService implements OnModuleInit {
       booking.paymentMethod = manualFields.paymentMethod;
     if (manualFields.galleryLink)
       booking.galleryLink = manualFields.galleryLink;
-    if (manualFields.sendGallery)
+    if (manualFields.sendGallery !== undefined)
       booking.sendGallery = manualFields.sendGallery;
 
     const targetSheet = await this.ensureMonthlySheet(booking.date);
@@ -249,7 +268,7 @@ export class GoogleSheetsService implements OnModuleInit {
       Залишок: booking.balance,
       'Дата фотосесії': booking.date,
       'Година фотосесії': booking.time,
-      'Відретушовані фото': !!booking.retouched,
+      'Відретушовані фото': booking.retouched ? 'TRUE' : 'FALSE',
       'Тип фотосесії': booking.type,
       Тариф: booking.tariff,
       Завдаток: booking.deposit,
@@ -263,7 +282,10 @@ export class GoogleSheetsService implements OnModuleInit {
       'Публікація чи дозволена': booking.publicationAllowed,
       'Спосіб оплати': booking.paymentMethod,
       Посилання: booking.galleryLink,
-      'Відправка посилання': !!booking.sendGallery,
+      'Відправка посилання':
+        booking.sendGallery === true || booking.sendGallery === 'TRUE'
+          ? 'TRUE'
+          : 'FALSE',
       'ПІ клієнта': booking.clientName,
       'Номер телефону': booking.phone,
       'Ел пошта': booking.email,

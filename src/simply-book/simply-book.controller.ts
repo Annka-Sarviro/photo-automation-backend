@@ -54,18 +54,58 @@ export class SimplyBookController {
           email: '',
           city: '',
         };
-        await this.googleSheetsService.deleteBooking(dummyBooking);
-        console.log(`Booking ${bookingId} cancelled and removed from sheets.`);
+
+        // Run deletion asynchronously
+        this.googleSheetsService
+          .deleteBooking(dummyBooking)
+          .then(() =>
+            console.log(
+              `Booking ${bookingId} cancelled and removed from sheets.`,
+            ),
+          )
+          .catch((e) =>
+            console.error(
+              `Error deleting cancelled booking ${bookingId}:`,
+              e,
+            ),
+          );
       } else if (
         notificationType === 'create' ||
         notificationType === 'change'
       ) {
-        const fullBooking =
-          await this.simplyBookService.getBookingDetails(bookingId);
-        await this.googleSheetsService.upsertBooking(fullBooking);
-        console.log(
-          `Booking ${bookingId} ${notificationType}d and synced to sheets.`,
-        );
+        // Extract old start date if available (for 'change' events)
+        let oldStartDate: string | undefined;
+        if (
+          notificationType === 'change' &&
+          payload.old_data &&
+          (payload.old_data as any).start_datetime
+        ) {
+          oldStartDate = (payload.old_data as any).start_datetime.split(' ')[0];
+        } else if (
+          notificationType === 'change' &&
+          payload.old_data &&
+          (payload.old_data as any).start_date
+        ) {
+          oldStartDate = (payload.old_data as any).start_date.split(' ')[0];
+        }
+
+        // Run upsert asynchronously
+        this.simplyBookService
+          .getBookingDetails(bookingId)
+          .then((fullBooking) =>
+            this.googleSheetsService.upsertBooking(fullBooking, oldStartDate),
+          )
+          .then(() =>
+            console.log(
+              `Booking ${bookingId} ${notificationType}d and synced to sheets.`,
+            ),
+          )
+          .catch((e) =>
+            console.error(
+              `Failed to sync booking ${bookingId} to sheets:`,
+              e,
+            ),
+          );
       } else {
         console.log(`Ignored unknown notification type: ${notificationType}`);
       }
